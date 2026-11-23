@@ -11,17 +11,54 @@ SERVICE=/etc/systemd/system/solar-ems.service
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 if [ "$(id -u)" -ne 0 ]; then echo "请用 root 运行：sudo bash $0"; exit 1; fi
-if ! python3 -c "import sys; sys.exit(sys.version_info < (3, 9))" 2>/dev/null; then
-  echo "需要 Python 3.9 或更高版本。Ubuntu/Debian: apt install -y python3   CentOS: yum install -y python39"
+
+# 找一个 >= 3.9 的 Python（阿里云 Alibaba Cloud Linux / CentOS 自带的 python3 是 3.6，太旧）
+find_python() {
+  for c in python3.13 python3.12 python3.11 python3.10 python3.9 python3; do
+    if command -v "$c" >/dev/null 2>&1 && "$c" -c "import sys, sqlite3; sys.exit(sys.version_info < (3, 9))" 2>/dev/null; then
+      command -v "$c"; return 0
+    fi
+  done
+  return 1
+}
+PY="$(find_python || true)"
+if [ -z "$PY" ]; then
+  echo "正在安装 Python 3（约 1 分钟）…"
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq && apt-get install -y -qq python3 >/dev/null
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y -q python3.11 >/dev/null 2>&1 || dnf install -y -q python39 >/dev/null
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y -q python3.11 >/dev/null 2>&1 || yum install -y -q python39 >/dev/null
+  fi
+  PY="$(find_python || true)"
+fi
+if [ -z "$PY" ]; then
+  echo "❌ 没能自动安装 Python 3.9+。建议在阿里云控制台把系统重装为 Ubuntu 22.04 后再试。"
   exit 1
 fi
-PY="$(command -v python3)"
+echo "使用 $("$PY" --version)（$PY）"
 
 id solar >/dev/null 2>&1 || useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin solar
 mkdir -p "$APP_DIR" "$DATA_DIR"
 rm -rf "$APP_DIR/solar"
 cp -r "$SRC_DIR/solar" "$SRC_DIR/run.py" "$APP_DIR/"
 chown -R solar: "$DATA_DIR"
+
+# 自检：确认这台服务器的 Python / SQLite 能正常运行平台
+if ! (cd "$APP_DIR" && "$PY" - <<'CHECK'
+from solar import db
+c = db.connect(":memory:")
+s = db.create_station(c, {"name": "t", "capacity_kwp": 1, "price": 1})
+db.upsert_record(c, s["id"], "2024-01-01", 1)
+db.upsert_record(c, s["id"], "2024-01-01", 2)
+assert db.summary(c, None)["total"]["kwh"] == 2
+assert db.monthly(c, None, 2024)["items"][0]["kwh"] == 2
+CHECK
+); then
+  echo "❌ 自检失败：此服务器的 Python/SQLite 版本不兼容。请把上面的报错发给开发者，或将系统重装为 Ubuntu 22.04。"
+  exit 1
+fi
 chmod 700 "$DATA_DIR"
 
 if [ ! -f "$ENV_FILE" ]; then

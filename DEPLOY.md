@@ -24,9 +24,29 @@ sudo bash deploy/install.sh
 
 安装时会让你设置**登录密码**。完成后平台会在后台运行，并且开机自动启动。
 
+### 仓库是私有的 / 服务器连不上 GitHub 时（阿里云推荐这种方式）
+
+1. 在自己电脑上登录 GitHub，下载代码压缩包：
+   https://github.com/str51095-commits/star/archive/refs/heads/claude/solar-energy-management-platform-4nc0xv.zip
+2. 阿里云控制台 → 实例 → **远程连接** → 选 **Workbench** 登录。
+   在 Workbench 顶部菜单 **文件 → 上传文件**，把压缩包上传到 `/root`。
+3. 在 Workbench 命令行中执行：
+
+```bash
+cd /root
+python3 -m zipfile -e star-*.zip .
+cd star-*/
+sudo bash deploy/install.sh
+```
+
+脚本会自动检查并安装合适的 Python 版本（Alibaba Cloud Linux 自带的 3.6 太旧），然后自检、启动服务。
+
 ## 3. 放行端口
 
 在云服务器控制台找到 **防火墙 / 安全组**，添加规则：允许 **TCP 8000** 端口。
+
+- 阿里云 **ECS**：实例详情 → **安全组** → 管理规则 → 入方向 → 手动添加：端口 `8000`，授权对象 `0.0.0.0/0`。
+- 阿里云 **轻量应用服务器**：服务器详情 → **防火墙** → 添加规则：TCP `8000`。
 
 然后浏览器访问 `http://服务器公网IP:8000`，输入密码登录。
 
