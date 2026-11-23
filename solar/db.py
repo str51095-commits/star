@@ -6,6 +6,8 @@ import random
 import sqlite3
 from datetime import date, datetime, timedelta
 
+from . import clock
+
 # 中国电网平均排放因子 (kg CO2 / kWh)，生态环境部 2022 年度全国电网平均排放因子 0.5703
 CO2_PER_KWH = 0.5703
 # 每度电折合标准煤 (kg)
@@ -265,7 +267,7 @@ def _month_end(year, month):
 
 
 def summary(conn, station_id=None, today=None):
-    today = today or date.today()
+    today = today or clock.today()
     where, args, cap = _scope(conn, station_id)
     y, m = today.year, today.month
     yesterday = today - timedelta(days=1)
@@ -295,7 +297,7 @@ def summary(conn, station_id=None, today=None):
 def daily(conn, station_id=None, month=None):
     """某月每日发电量。month 形如 2024-06。"""
     where, args, cap = _scope(conn, station_id)
-    y, m = (int(x) for x in (month or date.today().strftime("%Y-%m")).split("-"))
+    y, m = (int(x) for x in (month or clock.today().strftime("%Y-%m")).split("-"))
     end = _month_end(y, m)
     rows = conn.execute(
         f"""SELECT g.day AS label, SUM(g.kwh) AS kwh, SUM(g.kwh * s.price) AS revenue
@@ -317,7 +319,7 @@ def daily(conn, station_id=None, month=None):
 def monthly(conn, station_id=None, year=None):
     """某年每月发电量，附带上一年同期对比。"""
     where, args, cap = _scope(conn, station_id)
-    y = int(year or date.today().year)
+    y = int(year or clock.today().year)
 
     def by_month(yr):
         rows = conn.execute(
@@ -387,7 +389,7 @@ def _wrap(items, cap, period):
 def generate_demo(conn, days=800, seed=42, today=None):
     """创建两个示例电站并生成模拟的历史发电数据。"""
     rnd = random.Random(seed)
-    today = today or date.today()
+    today = today or clock.today()
     specs = [
         {"name": "屋顶光伏 1 号", "capacity_kwp": 50, "location": "江苏 苏州", "price": 0.391},
         {"name": "厂房分布式电站", "capacity_kwp": 300, "location": "浙江 嘉兴", "price": 0.4153},

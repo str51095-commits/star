@@ -36,6 +36,7 @@
       headers: opts.body ? { "Content-Type": "application/json" } : {},
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
+    if (res.status === 401) { location.href = "/login.html"; throw new Error("请先登录"); }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `请求失败 (${res.status})`);
     return data;
@@ -473,7 +474,17 @@
     addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => loadChart().catch(() => {}), 150); });
   }
 
+  async function initAuth() {
+    const a = await api("/api/auth").catch(() => ({}));
+    if (!a.enabled) return;
+    const b = document.createElement("button");
+    b.className = "btn small"; b.textContent = "退出";
+    b.onclick = async () => { await fetch("/api/logout", { method: "POST" }); location.href = "/login.html"; };
+    $(".topbar-actions").appendChild(b);
+  }
+
   initTheme();
+  initAuth();
   bind();
   refreshAll().catch(e => toast(e.message, true));
 })();

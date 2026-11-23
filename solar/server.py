@@ -5,16 +5,20 @@ import mimetypes
 import os
 import re
 import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import db
+from .auth import COOKIE, SESSION_DAYS, Auth, parse_cookies
 from .sync import GoodWeSync
 
 STATIC_DIR = Path(__file__).parent / "static"
 MAX_BODY = 20 * 1024 * 1024
+PUBLIC_PATHS = {"/login.html", "/style.css"}
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 
 class App:
@@ -22,6 +26,7 @@ class App:
         self.conn = db.connect(db_path)
         self.lock = threading.Lock()
         self.sync = GoodWeSync.from_env(self.conn, self.lock)
+        self.auth = Auth.from_env(self.conn)
         self.routes = [
             ("GET", r"/api/stations", self.stations_list),
             ("POST", r"/api/stations", self.stations_create),
@@ -125,7 +130,8 @@ def make_handler(app):
             if os.environ.get("SOLAR_QUIET") != "1":
                 super().log_message(fmt, *args)
 
-        def _send(self, status, payload, content_type="application/json; charset=utf-8", filename=None):
+        def _send(self, status, payload, content_type="application/json; charset=utf-8", filename=None,
+                  headers=()):
             if isinstance(payload, (dict, list)):
                 data = json.dumps(payload, ensure_ascii=False).encode()
             elif isinstance(payload, str):
@@ -137,15 +143,64 @@ def make_handler(app):
             self.send_header("Content-Length", str(len(data)))
             if filename:
                 self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "same-origin")
+            if content_type.startswith(("application/json", "text/csv")):
+                self.send_header("Cache-Control", "no-store")
+            for k, v in headers:
+                self.send_header(k, v)
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(data)
 
         def _handle(self):
             url = urlparse(self.path)
+            auth = app.auth
+            if url.path == "/api/auth":
+                return self._send(200, {"enabled": auth.enabled, "logged_in": self._authed()})
+            if url.path == "/api/login" and self.command == "POST":
+                return self._login()
+            if url.path == "/api/logout" and self.command == "POST":
+                return self._send(200, {"ok": True}, headers=[("Set-Cookie", self._cookie("", 0))])
+            if not self._authed() and url.path not in PUBLIC_PATHS:
+                if url.path.startswith("/api/"):
+                    return self._send(401, {"error": "请先登录"})
+                return self._send(302, b"", "text/plain", headers=[("Location", "/login.html")])
             if url.path.startswith("/api/"):
                 return self._api(url)
             return self._static(url.path)
+
+        def _authed(self):
+            return app.auth.verify(parse_cookies(self.headers.get("Cookie")).get(COOKIE))
+
+        def _client(self):
+            if os.environ.get("SOLAR_TRUST_PROXY") == "1" and self.headers.get("X-Forwarded-For"):
+                return self.headers["X-Forwarded-For"].split(",")[-1].strip()
+            return self.client_address[0]
+
+        def _cookie(self, value, max_age):
+            secure = (os.environ.get("SOLAR_SECURE_COOKIE") == "1"
+                      or self.headers.get("X-Forwarded-Proto", "").lower() == "https")
+            return (f"{COOKIE}={value}; Path=/; Max-Age={max_age}; HttpOnly; SameSite=Lax"
+                    + ("; Secure" if secure else ""))
+
+        def _login(self):
+            if not app.auth.enabled:
+                return self._send(200, {"ok": True})
+            src = self._client()
+            if app.auth.locked(src):
+                return self._send(429, {"error": "密码错误次数过多，请 5 分钟后再试"})
+            try:
+                length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, json.JSONDecodeError):
+                return self._send(400, {"error": "请求格式错误"})
+            if not isinstance(body, dict) or not app.auth.check_password(src, body.get("password")):
+                time.sleep(1)  # 减慢暴力破解
+                return self._send(401, {"error": "密码错误"})
+            cookie = self._cookie(app.auth.issue(), SESSION_DAYS * 86400)
+            return self._send(200, {"ok": True}, headers=[("Set-Cookie", cookie)])
 
         def _api(self, url):
             query = {k: v[-1] for k, v in parse_qs(url.query).items()}
@@ -189,12 +244,21 @@ def make_handler(app):
 
 def main():
     parser = argparse.ArgumentParser(description="光伏电站能源管理平台")
-    parser.add_argument("--host", default=os.environ.get("SOLAR_HOST", "0.0.0.0"))
+    parser.add_argument("--host", default=os.environ.get("SOLAR_HOST"),
+                        help="监听地址；未设密码时默认仅本机 127.0.0.1，设了密码默认 0.0.0.0")
     parser.add_argument("--port", type=int, default=int(os.environ.get("SOLAR_PORT", 8000)))
     parser.add_argument("--db", default=os.environ.get("SOLAR_DB", "solar.db"))
     parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
+    parser.add_argument("--allow-no-password", action="store_true",
+                        help="允许在未设置密码时对外网/局域网开放（不安全）")
     args = parser.parse_args()
     app = App(args.db)
+    if not args.host:
+        args.host = "0.0.0.0" if app.auth.enabled else "127.0.0.1"
+    if args.host not in LOOPBACK and not app.auth.enabled and not args.allow_no_password:
+        raise SystemExit("拒绝启动：对外开放时必须设置登录密码（环境变量 SOLAR_PASSWORD）。"
+                         "如确需无密码开放，请加 --allow-no-password")
+    print("登录密码保护：" + ("已开启" if app.auth.enabled else "未开启（仅本机可访问）"))
     httpd = ThreadingHTTPServer((args.host, args.port), make_handler(app))
     if app.sync.client:
         print(f"固德威自动同步已开启，每 {app.sync.status['interval_min']} 分钟一次")

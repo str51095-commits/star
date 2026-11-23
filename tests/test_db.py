@@ -129,3 +129,73 @@ class ApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AuthApiTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import os
+        os.environ["SOLAR_QUIET"] = "1"
+        os.environ["SOLAR_PASSWORD"] = "s3cret-pw"
+        try:
+            app = App(":memory:")
+        finally:
+            del os.environ["SOLAR_PASSWORD"]
+        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app))
+        cls.base = f"http://127.0.0.1:{cls.httpd.server_address[1]}"
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+
+    def req(self, method, path, body=None, cookie=None):
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *a, **k):
+                return None
+        opener = urllib.request.build_opener(NoRedirect)
+        headers = {"Content-Type": "application/json"}
+        if cookie:
+            headers["Cookie"] = cookie
+        r = urllib.request.Request(self.base + path, method=method, headers=headers,
+                                   data=json.dumps(body).encode() if body is not None else None)
+        try:
+            resp = opener.open(r)
+        except urllib.error.HTTPError as e:
+            resp = e
+        return resp.status if hasattr(resp, "status") else resp.code, resp.headers, resp.read()
+
+    def test_requires_login(self):
+        code, _, _ = self.req("GET", "/api/stations")
+        self.assertEqual(code, 401)
+        code, headers, _ = self.req("GET", "/")
+        self.assertEqual(code, 302)
+        self.assertEqual(headers["Location"], "/login.html")
+        code, _, _ = self.req("GET", "/login.html")
+        self.assertEqual(code, 200)
+
+    def test_login_flow(self):
+        code, _, _ = self.req("POST", "/api/login", {"password": "wrong"})
+        self.assertEqual(code, 401)
+        code, headers, _ = self.req("POST", "/api/login", {"password": "s3cret-pw"})
+        self.assertEqual(code, 200)
+        set_cookie = headers["Set-Cookie"]
+        self.assertIn("HttpOnly", set_cookie)
+        cookie = set_cookie.split(";")[0]
+        code, _, _ = self.req("GET", "/api/stations", cookie=cookie)
+        self.assertEqual(code, 200)
+        code, _, _ = self.req("GET", "/api/stations", cookie="solar_session=9999999999.deadbeef")
+        self.assertEqual(code, 401)
+
+
+class AuthUnitTest(unittest.TestCase):
+    def test_lockout_and_password_change(self):
+        from solar.auth import Auth, MAX_FAILS
+        a = Auth("pw", "secret")
+        tok = a.issue()
+        self.assertTrue(a.verify(tok))
+        self.assertFalse(Auth("other", "secret").verify(tok))  # 改密码后旧会话失效
+        for _ in range(MAX_FAILS):
+            a.check_password("1.2.3.4", "bad")
+        self.assertTrue(a.locked("1.2.3.4"))
+        self.assertFalse(a.locked("5.6.7.8"))

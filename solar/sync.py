@@ -2,9 +2,7 @@
 import os
 import threading
 import time
-from datetime import date, datetime
-
-from . import db
+from . import clock, db
 from .goodwe import DEFAULT_LOGIN_URL, GoodWeClient, GoodWeError
 
 SYNC_NOTE = "固德威自动同步"
@@ -37,7 +35,7 @@ class GoodWeSync:
         if not self._run_lock.acquire(blocking=False):
             return self.status  # 已有同步在进行
         try:
-            today = today or date.today()
+            today = today or clock.today()
             with self.lock:
                 stations = [s for s in db.list_stations(self.conn) if s.get("goodwe_station_id")]
             results = []
@@ -60,7 +58,7 @@ class GoodWeSync:
                 msg, ok = f"{len(results) - len(failed)}/{len(results)} 座电站同步成功；{failed[0]['error']}", False
             else:
                 msg, ok = f"{len(results)} 座电站同步成功", True
-            self.status.update(last_run=datetime.now().isoformat(timespec="seconds"),
+            self.status.update(last_run=clock.now_iso(),
                                ok=ok, message=msg, stations=results)
             return self.status
         finally:
