@@ -192,6 +192,7 @@ def main():
     parser.add_argument("--host", default=os.environ.get("SOLAR_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("SOLAR_PORT", 8000)))
     parser.add_argument("--db", default=os.environ.get("SOLAR_DB", "solar.db"))
+    parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
     args = parser.parse_args()
     app = App(args.db)
     httpd = ThreadingHTTPServer((args.host, args.port), make_handler(app))
@@ -199,6 +200,10 @@ def main():
         print(f"固德威自动同步已开启，每 {app.sync.status['interval_min']} 分钟一次")
         app.sync.start()
     print(f"光伏能源管理平台已启动: http://127.0.0.1:{args.port}  (数据库: {os.path.abspath(args.db)})")
+    print("关闭此窗口或按 Ctrl+C 即可停止平台")
+    if not args.no_browser:
+        import webbrowser
+        threading.Timer(0.8, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

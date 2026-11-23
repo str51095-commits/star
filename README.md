@@ -7,6 +7,14 @@
 
 ## 快速开始
 
+**最简单的方式**：先安装 [Python 3](https://www.python.org/downloads/)（Windows 安装时勾选 “Add python.exe to PATH”），然后
+- Windows：双击 `start.bat`
+- macOS：双击 `start.command`
+
+浏览器会自动打开平台；启动后的黑色窗口不要关，关掉平台就停止了。
+
+命令行方式：
+
 ```bash
 python3 run.py            # 默认 http://127.0.0.1:8000 ，数据库 solar.db
 python3 run.py --port 9000 --db /path/to/my-solar.db
