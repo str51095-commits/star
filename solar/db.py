@@ -33,7 +33,41 @@ CREATE TABLE IF NOT EXISTS generation (
     note TEXT DEFAULT '',
     UNIQUE(station_id, day)
 );
-CREATE INDEX IF NOT EXISTS idx_generation_day ON generation(day);
+-- 覆盖索引：统计查询直接从索引读取，不必回表
+CREATE INDEX IF NOT EXISTS idx_gen_day_cover ON generation(day, station_id, kwh);
+CREATE INDEX IF NOT EXISTS idx_gen_station_cover ON generation(station_id, day, kwh);
+"""
+
+# 汇总表：由触发器自动维护，让“全部电站”的月/年/累计统计不必扫描全部日记录
+ROLLUP_SCHEMA = """
+CREATE TABLE IF NOT EXISTS station_month (
+    station_id INTEGER NOT NULL, month TEXT NOT NULL, kwh REAL NOT NULL DEFAULT 0, n INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (station_id, month)
+);
+CREATE INDEX IF NOT EXISTS idx_station_month_month ON station_month(month, station_id, kwh, n);
+CREATE TABLE IF NOT EXISTS day_total (
+    day TEXT PRIMARY KEY, kwh REAL NOT NULL DEFAULT 0, n INTEGER NOT NULL DEFAULT 0
+);
+CREATE TRIGGER IF NOT EXISTS trg_gen_ins AFTER INSERT ON generation BEGIN
+    INSERT INTO station_month (station_id, month, kwh, n) VALUES (NEW.station_id, substr(NEW.day,1,7), NEW.kwh, 1)
+        ON CONFLICT(station_id, month) DO UPDATE SET kwh = kwh + NEW.kwh, n = n + 1;
+    INSERT INTO day_total (day, kwh, n) VALUES (NEW.day, NEW.kwh, 1)
+        ON CONFLICT(day) DO UPDATE SET kwh = kwh + NEW.kwh, n = n + 1;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_gen_del AFTER DELETE ON generation BEGIN
+    UPDATE station_month SET kwh = kwh - OLD.kwh, n = n - 1
+        WHERE station_id = OLD.station_id AND month = substr(OLD.day,1,7);
+    UPDATE day_total SET kwh = kwh - OLD.kwh, n = n - 1 WHERE day = OLD.day;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_gen_upd AFTER UPDATE OF station_id, day, kwh ON generation BEGIN
+    UPDATE station_month SET kwh = kwh - OLD.kwh, n = n - 1
+        WHERE station_id = OLD.station_id AND month = substr(OLD.day,1,7);
+    UPDATE day_total SET kwh = kwh - OLD.kwh, n = n - 1 WHERE day = OLD.day;
+    INSERT INTO station_month (station_id, month, kwh, n) VALUES (NEW.station_id, substr(NEW.day,1,7), NEW.kwh, 1)
+        ON CONFLICT(station_id, month) DO UPDATE SET kwh = kwh + NEW.kwh, n = n + 1;
+    INSERT INTO day_total (day, kwh, n) VALUES (NEW.day, NEW.kwh, 1)
+        ON CONFLICT(day) DO UPDATE SET kwh = kwh + NEW.kwh, n = n + 1;
+END;
 """
 
 STATION_FIELDS = ("name", "capacity_kwp", "location", "commission_date", "price", "notes", "goodwe_station_id")
@@ -49,11 +83,27 @@ def connect(path):
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
     _migrate(conn)
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'station_month'").fetchone():
+        conn.executescript(ROLLUP_SCHEMA)
+        rebuild_rollups(conn)
     return conn
 
 
+def rebuild_rollups(conn):
+    """根据日记录重新计算汇总表（首次升级或校正浮点累计误差时使用）。"""
+    with conn:
+        conn.execute("DELETE FROM station_month")
+        conn.execute("DELETE FROM day_total")
+        conn.execute("""INSERT INTO station_month (station_id, month, kwh, n)
+                        SELECT station_id, substr(day,1,7), SUM(kwh), COUNT(*) FROM generation GROUP BY 1, 2""")
+        conn.execute("""INSERT INTO day_total (day, kwh, n)
+                        SELECT day, SUM(kwh), COUNT(*) FROM generation GROUP BY day""")
+
+
 def _migrate(conn):
-    """给旧版数据库补充新增的列。"""
+    """给旧版数据库补充新增的列、清理旧索引。"""
+    with conn:
+        conn.execute("DROP INDEX IF EXISTS idx_generation_day")
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(stations)")}
     if "goodwe_station_id" not in cols:
         with conn:
@@ -110,10 +160,13 @@ def _clean_station(data, partial=False):
 
 def list_stations(conn):
     rows = conn.execute(
-        """SELECT s.*, COALESCE(SUM(g.kwh), 0) AS total_kwh, COUNT(g.id) AS record_days,
-                  MAX(g.day) AS last_day
-           FROM stations s LEFT JOIN generation g ON g.station_id = s.id
-           GROUP BY s.id ORDER BY s.id"""
+        """SELECT s.*, COALESCE(a.total_kwh, 0) AS total_kwh, COALESCE(a.record_days, 0) AS record_days,
+                  a.last_day
+           FROM stations s LEFT JOIN (
+               SELECT station_id, SUM(kwh) AS total_kwh, COUNT(*) AS record_days, MAX(day) AS last_day
+               FROM generation GROUP BY station_id
+           ) a ON a.station_id = s.id
+           ORDER BY s.id"""
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -241,16 +294,52 @@ def _scope(conn, station_id):
     return "", [], cap
 
 
+def _series(conn, where, args, start, end, label_len):
+    """按时间粒度汇总：label_len 10=日 7=月 4=年 0=整段。
+
+    收益按各电站电价分别计算（先按“时间+电站”汇总，再乘各自电价）。
+    按月对齐的区间直接读汇总表 station_month / day_total，速度与日记录条数无关。
+    返回 {label: {"kwh", "revenue", "days"}}。
+    """
+    prices = {r[0]: r[1] for r in conn.execute("SELECT id, price FROM stations")}
+    params = [start, end, *args]
+    month_aligned = label_len != 10 and start.endswith("-01-01" if label_len == 4 else "-01") and (
+        end[5:] == "12-31" or end == _month_end(int(end[:4]), int(end[5:7])).isoformat())
+    if month_aligned:
+        m_where = where.replace("g.", "m.")
+        rows = conn.execute(
+            f"SELECT substr(m.month,1,{label_len}), m.station_id, SUM(m.kwh) FROM station_month m "
+            f"WHERE m.month >= ? AND m.month <= ? AND m.n > 0{m_where} GROUP BY 1, 2",
+            [start[:7], end[:7], *args])
+        if args:  # 单个电站：每天最多一条记录，天数 = 记录数
+            day_rows = conn.execute(
+                f"SELECT substr(m.month,1,{label_len}), SUM(m.n) FROM station_month m "
+                f"WHERE m.month >= ? AND m.month <= ? AND m.n > 0{m_where} GROUP BY 1", [start[:7], end[:7], *args])
+        else:
+            day_rows = conn.execute(
+                f"SELECT substr(d.day,1,{label_len}), COUNT(*) FROM day_total d "
+                f"WHERE d.day >= ? AND d.day <= ? AND d.n > 0 GROUP BY 1", [start, end])
+    else:
+        rng = "g.day >= ? AND g.day <= ?" + where
+        rows = conn.execute(
+            f"SELECT substr(g.day,1,{label_len}), g.station_id, SUM(g.kwh) FROM generation g "
+            f"WHERE {rng} GROUP BY 1, 2", params)
+        day_rows = conn.execute(
+            f"SELECT substr(g.day,1,{label_len}), COUNT(DISTINCT g.day) FROM generation g "
+            f"WHERE {rng} GROUP BY 1", params)
+    out = {}
+    for label, sid, kwh in rows:
+        item = out.setdefault(label, {"kwh": 0.0, "revenue": 0.0, "days": 0})
+        item["kwh"] += kwh
+        item["revenue"] += kwh * prices.get(sid, 0)
+    for label, days in day_rows:
+        if label in out:
+            out[label]["days"] = days
+    return out
+
+
 def _sum(conn, where, args, start, end):
-    row = conn.execute(
-        f"""SELECT COALESCE(SUM(g.kwh),0) AS kwh,
-                   COALESCE(SUM(g.kwh * s.price),0) AS revenue,
-                   COUNT(DISTINCT g.day) AS days
-            FROM generation g JOIN stations s ON s.id = g.station_id
-            WHERE g.day >= ? AND g.day <= ?{where}""",
-        [start, end, *args],
-    ).fetchone()
-    return dict(row)
+    return _series(conn, where, args, start, end, 0).get("", {"kwh": 0, "revenue": 0, "days": 0})
 
 
 def _decorate(item, capacity):
@@ -277,7 +366,7 @@ def summary(conn, station_id=None, today=None):
         "month": (date(y, m, 1), _month_end(y, m)),
         "year": (date(y, 1, 1), date(y, 12, 31)),
         "last_year": (date(y - 1, 1, 1), date(y - 1, 12, 31)),
-        "total": (date(1900, 1, 1), date(9999, 12, 31)),
+        "total": (date(1000, 1, 1), date(9999, 12, 31)),
     }
     out = {"capacity_kwp": cap, "date": today.isoformat()}
     for key, (s, e) in periods.items():
@@ -286,10 +375,11 @@ def summary(conn, station_id=None, today=None):
     out["co2_kg"] = round(total * CO2_PER_KWH, 1)
     out["coal_kg"] = round(total * COAL_PER_KWH, 1)
     out["trees"] = round(total * CO2_PER_KWH / 18.3)  # 一棵树每年约吸收 18.3 kg CO2
-    best = conn.execute(
-        f"""SELECT g.day, SUM(g.kwh) AS kwh FROM generation g WHERE 1=1{where}
-            GROUP BY g.day ORDER BY kwh DESC LIMIT 1""", args
-    ).fetchone()
+    if args:
+        best = conn.execute(
+            "SELECT day, kwh FROM generation WHERE station_id = ? ORDER BY kwh DESC LIMIT 1", args).fetchone()
+    else:
+        best = conn.execute("SELECT day, kwh FROM day_total WHERE n > 0 ORDER BY kwh DESC LIMIT 1").fetchone()
     out["best_day"] = dict(best) if best else None
     return out
 
@@ -299,13 +389,7 @@ def daily(conn, station_id=None, month=None):
     where, args, cap = _scope(conn, station_id)
     y, m = (int(x) for x in (month or clock.today().strftime("%Y-%m")).split("-"))
     end = _month_end(y, m)
-    rows = conn.execute(
-        f"""SELECT g.day AS label, SUM(g.kwh) AS kwh, SUM(g.kwh * s.price) AS revenue
-            FROM generation g JOIN stations s ON s.id = g.station_id
-            WHERE g.day >= ? AND g.day <= ?{where} GROUP BY g.day""",
-        [date(y, m, 1).isoformat(), end.isoformat(), *args],
-    ).fetchall()
-    found = {r["label"]: dict(r) for r in rows}
+    found = _series(conn, where, args, date(y, m, 1).isoformat(), end.isoformat(), 10)
     items = []
     for d in range(1, end.day + 1):
         key = date(y, m, d).isoformat()
@@ -322,14 +406,7 @@ def monthly(conn, station_id=None, year=None):
     y = int(year or clock.today().year)
 
     def by_month(yr):
-        rows = conn.execute(
-            f"""SELECT substr(g.day,1,7) AS label, SUM(g.kwh) AS kwh, SUM(g.kwh*s.price) AS revenue,
-                       COUNT(DISTINCT g.day) AS days
-                FROM generation g JOIN stations s ON s.id = g.station_id
-                WHERE g.day >= ? AND g.day <= ?{where} GROUP BY label""",
-            [f"{yr}-01-01", f"{yr}-12-31", *args],
-        ).fetchall()
-        return {r["label"]: dict(r) for r in rows}
+        return _series(conn, where, args, f"{yr}-01-01", f"{yr}-12-31", 7)
 
     cur, prev = by_month(y), by_month(y - 1)
     items = []
@@ -349,17 +426,11 @@ def monthly(conn, station_id=None, year=None):
 
 def yearly(conn, station_id=None):
     where, args, cap = _scope(conn, station_id)
-    rows = conn.execute(
-        f"""SELECT substr(g.day,1,4) AS label, SUM(g.kwh) AS kwh, SUM(g.kwh*s.price) AS revenue,
-                   COUNT(DISTINCT g.day) AS days
-            FROM generation g JOIN stations s ON s.id = g.station_id
-            WHERE 1=1{where} GROUP BY label ORDER BY label""",
-        args,
-    ).fetchall()
+    series = _series(conn, where, args, "1000-01-01", "9999-12-31", 4)
     items = []
     prev = None
-    for r in rows:
-        item = dict(r)
+    for label in sorted(series):
+        item = {"label": label, **series[label]}
         item["has_data"] = True
         item["yoy"] = round((item["kwh"] - prev) / prev * 100, 1) if prev else None
         prev = item["kwh"]
@@ -410,6 +481,7 @@ def generate_demo(conn, days=800, seed=42, today=None):
             rows.append((st["id"], d.isoformat(), round(spec["capacity_kwp"] * season * weather, 1)))
         with conn:
             conn.executemany(
-                "INSERT OR REPLACE INTO generation (station_id, day, kwh) VALUES (?, ?, ?)", rows
+                """INSERT INTO generation (station_id, day, kwh) VALUES (?, ?, ?)
+                   ON CONFLICT(station_id, day) DO UPDATE SET kwh = excluded.kwh""", rows
             )
     return created
