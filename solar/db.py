@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS stations (
     commission_date TEXT DEFAULT '',
     price REAL NOT NULL DEFAULT 0,
     notes TEXT DEFAULT '',
+    goodwe_station_id TEXT DEFAULT '',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS generation (
@@ -33,7 +34,7 @@ CREATE TABLE IF NOT EXISTS generation (
 CREATE INDEX IF NOT EXISTS idx_generation_day ON generation(day);
 """
 
-STATION_FIELDS = ("name", "capacity_kwp", "location", "commission_date", "price", "notes")
+STATION_FIELDS = ("name", "capacity_kwp", "location", "commission_date", "price", "notes", "goodwe_station_id")
 
 
 class ValidationError(ValueError):
@@ -45,7 +46,16 @@ def connect(path):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn):
+    """给旧版数据库补充新增的列。"""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(stations)")}
+    if "goodwe_station_id" not in cols:
+        with conn:
+            conn.execute("ALTER TABLE stations ADD COLUMN goodwe_station_id TEXT DEFAULT ''")
 
 
 def _parse_day(value):

@@ -70,7 +70,7 @@
   function showView(name) {
     $$(".tab").forEach(b => b.classList.toggle("active", b.dataset.view === name));
     $$(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + name));
-    if (name === "entry") loadRecords();
+    if (name === "entry") { loadRecords(); loadSync().catch(() => {}); }
   }
 
   // ---------- 电站 ----------
@@ -95,10 +95,11 @@
   function renderStationsTable() {
     const t = $("#stationsTable");
     if (!state.stations.length) { t.innerHTML = `<tr><td class="hint">暂无电站</td></tr>`; return; }
-    t.innerHTML = `<thead><tr><th>名称</th><th class="num">容量 kWp</th><th class="num">电价</th><th>地址</th><th>并网日期</th><th class="num">累计发电</th><th class="num">记录天数</th><th>最近数据</th><th></th></tr></thead><tbody>` +
+    t.innerHTML = `<thead><tr><th>名称</th><th class="num">容量 kWp</th><th class="num">电价</th><th>地址</th><th>并网日期</th><th>固德威同步</th><th class="num">累计发电</th><th class="num">记录天数</th><th>最近数据</th><th></th></tr></thead><tbody>` +
       state.stations.map(s => `<tr>
         <td>${esc(s.name)}</td><td class="num">${nf(s.capacity_kwp, 2)}</td><td class="num">${nf(s.price, 4)}</td>
         <td>${esc(s.location) || "—"}</td><td>${esc(s.commission_date) || "—"}</td>
+        <td title="${esc(s.goodwe_station_id)}">${s.goodwe_station_id ? "已关联" : "—"}</td>
         <td class="num">${energyStr(s.total_kwh)}</td><td class="num">${s.record_days}</td><td>${s.last_day || "—"}</td>
         <td><button class="btn small" data-edit="${s.id}">编辑</button> <button class="btn small danger" data-del="${s.id}">删除</button></td>
       </tr>`).join("") + "</tbody>";
@@ -107,7 +108,7 @@
   function fillStationForm(s) {
     const f = $("#stationForm");
     f.reset();
-    for (const k of ["id", "name", "capacity_kwp", "price", "location", "commission_date", "notes"]) {
+    for (const k of ["id", "name", "capacity_kwp", "price", "location", "commission_date", "notes", "goodwe_station_id"]) {
       if (s && s[k] != null) f.elements[k].value = s[k];
     }
     $("#stationFormTitle").textContent = s ? `编辑电站：${s.name}` : "添加电站";
@@ -326,6 +327,26 @@
         <button class="btn small danger" data-delrec="${r.id}">删除</button></td></tr>`).join("") + "</tbody>";
   }
 
+  // ---------- 固德威同步 ----------
+  function renderSync(st) {
+    const msg = $("#syncMsg");
+    msg.className = "sync-msg " + (st.ok === true ? "ok" : st.ok === false ? "err" : "");
+    if (!st.enabled) {
+      msg.innerHTML = `<span class="dot"></span>未开启。启动前设置环境变量 <code>GOODWE_ACCOUNT</code> 和 <code>GOODWE_PASSWORD</code>（SEMS 账号密码），并在「电站管理」中填写固德威电站 ID。`;
+      $("#syncBtn").disabled = true;
+      $("#syncTable").innerHTML = "";
+      return;
+    }
+    $("#syncBtn").disabled = false;
+    msg.innerHTML = `<span class="dot"></span>${esc(st.message)}` +
+      (st.last_run ? ` · 上次同步 ${esc(st.last_run.replace("T", " "))}` : "") + ` · 每 ${st.interval_min} 分钟自动同步`;
+    const rows = st.stations || [];
+    $("#syncTable").innerHTML = rows.length ? `<thead><tr><th>电站</th><th>状态</th><th class="num">今日 kWh</th><th class="num">本月 kWh</th><th class="num">累计 kWh</th><th class="num">当前功率 W</th></tr></thead><tbody>` +
+      rows.map(r => `<tr><td>${esc(r.station)}</td><td>${r.ok ? "成功" : "失败：" + esc(r.error)}</td>
+        <td class="num">${nf(r.today_kwh, 2)}</td><td class="num">${nf(r.month_kwh, 1)}</td><td class="num">${nf(r.total_kwh, 1)}</td><td class="num">${nf(r.power_w, 0)}</td></tr>`).join("") + "</tbody>" : "";
+  }
+  async function loadSync() { renderSync(await api("/api/sync/status")); }
+
   async function refreshAll() {
     await loadStations();
     await Promise.all([loadSummary(), loadChart()]);
@@ -424,6 +445,15 @@
     });
 
     $("#recordsMonth").onchange = guard(loadRecords);
+    $("#syncBtn").onclick = guard(async () => {
+      $("#syncBtn").disabled = true; $("#syncBtn").textContent = "同步中…";
+      try {
+        const st = await api("/api/sync/run", { method: "POST" });
+        renderSync(st);
+        toast(st.message, st.ok === false);
+        await refreshAll();
+      } finally { $("#syncBtn").textContent = "立即同步"; $("#syncBtn").disabled = false; }
+    });
     $("#recordsTable").onclick = guard(async e => {
       if (e.target.dataset.delrec) {
         if (!confirm("确定删除这条记录？")) return;

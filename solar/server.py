@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import db
+from .sync import GoodWeSync
 
 STATIC_DIR = Path(__file__).parent / "static"
 MAX_BODY = 20 * 1024 * 1024
@@ -20,6 +21,7 @@ class App:
     def __init__(self, db_path):
         self.conn = db.connect(db_path)
         self.lock = threading.Lock()
+        self.sync = GoodWeSync.from_env(self.conn, self.lock)
         self.routes = [
             ("GET", r"/api/stations", self.stations_list),
             ("POST", r"/api/stations", self.stations_create),
@@ -35,6 +37,8 @@ class App:
             ("GET", r"/api/stats/monthly", self.stats_monthly),
             ("GET", r"/api/stats/yearly", self.stats_yearly),
             ("POST", r"/api/demo", self.demo),
+            ("GET", r"/api/sync/status", self.sync_status),
+            ("POST", r"/api/sync/run", self.sync_run),
         ]
 
     # 每个 handler 返回 (status, body)；body 为 dict/list 时按 JSON 输出
@@ -89,10 +93,18 @@ class App:
     def demo(self, q, body):
         return 201, db.generate_demo(self.conn)
 
+    def sync_status(self, q, body):
+        return 200, self.sync.status
+
+    def sync_run(self, q, body):
+        return 200, self.sync.run_once()
+
     def dispatch(self, method, path, query, body):
         for m, pattern, fn in self.routes:
             match = re.fullmatch(pattern, path)
             if match and m == method:
+                if fn.__name__.startswith("sync_"):  # 同步会访问网络，内部自行加锁
+                    return fn(query, body, *match.groups())
                 with self.lock:
                     return fn(query, body, *match.groups())
         if any(re.fullmatch(p, path) for _, p, _ in self.routes):
@@ -183,6 +195,9 @@ def main():
     args = parser.parse_args()
     app = App(args.db)
     httpd = ThreadingHTTPServer((args.host, args.port), make_handler(app))
+    if app.sync.client:
+        print(f"固德威自动同步已开启，每 {app.sync.status['interval_min']} 分钟一次")
+        app.sync.start()
     print(f"光伏能源管理平台已启动: http://127.0.0.1:{args.port}  (数据库: {os.path.abspath(args.db)})")
     try:
         httpd.serve_forever()

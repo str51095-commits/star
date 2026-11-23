@@ -23,6 +23,39 @@ python3 run.py --port 9000 --db /path/to/my-solar.db
 
 想先体验？在空白首页点 **生成演示数据**，会创建两个示例电站和约两年的模拟数据。
 
+## 固德威 (GoodWe) 自动同步
+
+平台可以每隔一段时间从固德威 SEMS 云平台读取电站的**当日发电量**，自动写入当天的记录，不用再手动录入。
+
+1. 在 **电站管理** 里编辑电站，填写 **固德威电站 ID**。
+   登录 [SEMS 网页版](https://www.semsportal.com)，打开电站页面，浏览器地址栏中那串类似
+   `1a2b3c4d-xxxx-xxxx-xxxx-xxxxxxxxxxxx` 的 ID 就是电站 ID。
+2. 启动时用环境变量提供 SEMS 账号（与 SEMS App 登录的账号密码相同）：
+
+   ```bash
+   # macOS / Linux
+   GOODWE_ACCOUNT=你的账号 GOODWE_PASSWORD=你的密码 python3 run.py
+   ```
+   ```bat
+   :: Windows (cmd)
+   set GOODWE_ACCOUNT=你的账号
+   set GOODWE_PASSWORD=你的密码
+   python run.py
+   ```
+
+3. 在 **数据录入** 页的“固德威自动同步”卡片里可以看到同步状态，也可以点 **立即同步**。
+
+| 环境变量 | 说明 | 默认 |
+|---|---|---|
+| `GOODWE_ACCOUNT` / `GOODWE_PASSWORD` | SEMS 账号、密码（都设置了才会开启同步） | — |
+| `GOODWE_SYNC_MINUTES` | 同步间隔（分钟） | 15 |
+| `GOODWE_LOGIN_URL` | 登录接口地址 | `https://www.semsportal.com/api/v2/Common/CrossLogin` |
+
+说明：
+- 每次同步会用最新的“今日发电量”覆盖当天记录（备注为“固德威自动同步”）。日落后的最后一次同步即为当天最终值，所以平台需要保持运行。
+- 历史数据请从 SEMS 导出后用 CSV 导入。
+- 对接逻辑在 `solar/goodwe.py`。固德威未公开官方接口文档，此处采用开源社区通用的 SEMS 接口；如果申请到官方 OpenAPI，只需修改该文件。
+
 ## 统计指标说明
 
 | 指标 | 计算方式 |
@@ -62,6 +95,8 @@ python3 run.py --port 9000 --db /path/to/my-solar.db
 | GET | `/api/stats/daily?month=YYYY-MM` | 某月每日发电量 |
 | GET | `/api/stats/monthly?year=YYYY` | 某年每月发电量（含去年同期、同比） |
 | GET | `/api/stats/yearly` | 历年发电量 |
+| GET | `/api/sync/status` | 固德威同步状态 |
+| POST | `/api/sync/run` | 立即同步一次 |
 
 `station_id` 省略时统计全部电站。
 

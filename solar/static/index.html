@@ -94,6 +94,14 @@
         </div>
       </div>
     </div>
+    <div class="card" id="syncCard">
+      <div class="card-head">
+        <h2>固德威自动同步</h2>
+        <button class="btn" id="syncBtn">立即同步</button>
+      </div>
+      <p id="syncMsg" class="sync-msg"></p>
+      <div class="table-scroll"><table id="syncTable"></table></div>
+    </div>
     <div class="card">
       <div class="card-head">
         <h2>最近记录</h2>
@@ -118,6 +126,9 @@
           <label>地址<input name="location" placeholder="可选"></label>
           <label>并网日期<input type="date" name="commission_date"></label>
           <label>备注<input name="notes" placeholder="可选"></label>
+          <label>固德威电站 ID（自动同步用，可选）
+            <input name="goodwe_station_id" placeholder="SEMS 网页版电站页面网址中的 ID">
+          </label>
           <div class="row-gap">
             <button class="btn primary" type="submit">保存</button>
             <button class="btn hidden" type="button" id="stationCancel">取消编辑</button>
