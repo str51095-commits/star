@@ -17,6 +17,8 @@ MODELS = {
     "emc": "投资方全额投资（合同能源管理）",
     "self": "业主自投",
 }
+DC_AC_RATIO = 1.2  # 逆变器自动配置时的目标容配比
+
 GRID_MODES = ["自发自用，余电上网", "全额上网", "全部自发自用"]
 
 
@@ -112,14 +114,11 @@ def fmt(x, nd=2):
 def compute(form: dict) -> dict:
     d = form
     r: dict = {}
-    ptype = _text(d, "project_type", "工商业")
-    if ptype not in ("工商业", "户用"):
-        raise InputError("项目类型只能是「工商业」或「户用」")
-    r["project_type"] = ptype
+    r["project_type"] = "工商业"  # 只做工商业项目
     r["client_name"] = _text(d, "client_name")
     if not r["client_name"]:
         raise InputError("请填写「客户名称」")
-    r["term"] = _text(d, "client_term", "工厂" if ptype == "工商业" else "业主")
+    r["term"] = _text(d, "client_term", "工厂")
     r["address"] = _text(d, "address")
     if not r["address"]:
         raise InputError("请填写「项目地址」")
@@ -151,9 +150,9 @@ def compute(form: dict) -> dict:
     if inv_n_raw:
         inv_n = _num(d, "inverter_count", "逆变器数量（台）", lo=1, hi=10000, integer=True)
     else:
-        # 选容配比最接近 1.1 的台数
-        base = max(1, int(kwp / 1.1 / inv_kw))
-        inv_n = min((base, base + 1), key=lambda k: abs(kwp / (k * inv_kw) - 1.1))
+        # 选容配比最接近 DC_AC_RATIO 的台数
+        base = max(1, int(kwp / DC_AC_RATIO / inv_kw))
+        inv_n = min((base, base + 1), key=lambda k: abs(kwp / (k * inv_kw) - DC_AC_RATIO))
     r["inverter_count"] = inv_n
     r["inverter_type"] = _text(d, "inverter_type", "组串逆变器")
     r["dc_ac_ratio"] = kwp / (inv_n * inv_kw)
@@ -191,7 +190,7 @@ def compute(form: dict) -> dict:
 
     # ---------- 用电情况 ----------
     r["has_usage"] = False
-    if ptype == "工商业" and _text(d, "usage_monthly"):
+    if _text(d, "usage_monthly"):
         vals = parse_monthly(_text(d, "usage_monthly"))
         if not any(v is not None for v in vals):
             raise InputError("月用电量至少要填一个月")

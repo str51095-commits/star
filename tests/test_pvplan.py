@@ -47,12 +47,12 @@ def test_emc_report_has_client_and_numbers():
 
 
 @pytest.mark.parametrize("form,expect,absent", [
-    (dict(BASE, project_type="户用", client_name="张三", address="宁夏吴忠", capacity_kw="30", inverter_kw="30",
-          grid_mode="全额上网", model="self", feed_price="0.3595", invest_unit="3.0"),
-     ["业主自主投资，全额上网", "静态投资回收期", "发电量（度）"], ["用电现状", "工厂", "租金"]),
-    (dict(BASE, project_type="户用", client_name="李四", address="宁夏吴忠", capacity_kw="30", inverter_kw="30",
-          grid_mode="自发自用，余电上网", self_ratio="40", model="emc", grid_price="0.55", ppa_price="0.45"),
-     ["业主享受0.45元/度固定电价", "合同能源管理（EMC）"], ["用电现状", "工厂", "租金"]),
+    (dict(BASE, client_name="某小厂", address="宁夏吴忠", capacity_kw="60", inverter_kw="30",
+          grid_mode="全额上网", model="self", feed_price="0.2595", invest_unit="3.0"),
+     ["工厂自主投资，全额上网", "静态投资回收期", "发电量（度）"], ["用电现状", "租金", "业主"]),
+    (dict(BASE, client_name="某物流园", client_term="园区", address="银川", capacity_kw="800",
+          grid_mode="自发自用，余电上网", self_ratio="70", model="emc", grid_price="0.55", ppa_price="0.45"),
+     ["园区享受0.45元/度固定电价", "合同能源管理（EMC）", "利用园区屋顶"], ["用电现状", "工厂", "租金"]),
     (dict(BASE, project_type="工商业", client_name="某食品厂", address="银川", capacity_kw="500",
           grid_mode="自发自用，余电上网", self_ratio="80", model="self", grid_price="0.62", feed_price="0.2595",
           invest_unit="2.8"),
@@ -79,6 +79,14 @@ def test_default_hours_1400():
     f["model"] = "rent"
     with pytest.raises(calc.InputError):
         calc.compute(f)
+
+
+@pytest.mark.parametrize("kw,inv,n", [(1500.6, 150, 8), (500, 150, 3), (800, 150, 4), (100, 50, 2), (30, 30, 1)])
+def test_inverter_ratio_1_2(kw, inv, n):
+    r = calc.compute(dict(BASE, client_name="a", address="b", capacity_kw=str(kw), inverter_kw=str(inv),
+                          self_ratio="80", grid_price="0.6", ppa_price="0.4"))
+    assert r["inverter_count"] == n
+    assert calc.DC_AC_RATIO == 1.2
 
 
 def test_payback():

@@ -177,21 +177,13 @@ def logout():
 
 
 # ---------------------------------------------------------------- 方案
-DEFAULTS = {
-    "工商业": dict(project_type="工商业", client_term="工厂", module_name="隆基HPBC三防", module_power="655",
+DEFAULTS = dict(client_term="工厂", module_name="隆基HPBC三防", module_power="655",
                 inverter_kw="150", inverter_type="组串逆变器", install_method="阵列式安装",
                 grid_mode="自发自用，余电上网", hours="1400", self_ratio="90", decay_first="1", decay_annual="0.4",
                 years="25", emission_factor="0.5306", model="emc", contract_years="25", ppa_price="0.45",
                 invest_unit="2.8", om_unit="0.03", usage_start="",
-                plan_suffix="分布式光伏发电项目前期方案"),
-    "户用": dict(project_type="户用", client_term="业主", module_name="隆基HPBC三防", module_power="655",
-               inverter_kw="20", inverter_type="组串逆变器", install_method="阵列式安装",
-               grid_mode="全额上网", hours="1400", self_ratio="30", decay_first="1", decay_annual="0.4",
-               years="25", emission_factor="0.5306", model="self", contract_years="25", ppa_price="0.45",
-               invest_unit="3.0", om_unit="0.02",
-               plan_suffix="户用光伏发电项目方案"),
-}
-FIELDS = sorted({k for v in DEFAULTS.values() for k in v} | {
+                plan_suffix="分布式光伏发电项目前期方案")
+FIELDS = sorted(set(DEFAULTS) | {
     "client_name", "address", "roof_area", "module_count", "capacity_kw", "inverter_count", "grid_price",
     "feed_price", "usage_monthly", "usage_type", "usage_notes"})
 
@@ -256,13 +248,12 @@ def new():
             return redirect(url_for("plan", pid=cur.lastrowid, new=1))
     else:
         src = request.args.get("from", type=int)
-        ptype = request.args.get("type", "工商业")
-        form = dict(DEFAULTS.get(ptype, DEFAULTS["工商业"]))
+        form = dict(DEFAULTS)
         if src:
             row = db().execute("SELECT form FROM plans WHERE id=?", (src,)).fetchone()
             if row:
                 form.update(json.loads(row["form"]))
-    return render_template("form.html", form=form, error=error, defaults=DEFAULTS,
+    return render_template("form.html", form=form, error=error,
                            grid_modes=calc.GRID_MODES, models=calc.MODELS)
 
 

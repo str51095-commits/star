@@ -406,8 +406,7 @@ def _fill_benefit(doc, head, tbl_el, r, term, company):
             f"{term}零投资、零运维，首年节省电费约{_money(r['benefit_y1'])}，{r['benefit_years']}年累计约{_money(r['benefit_total'])}。",
             f"电价按{fmt(r['ppa_price'], 4)}元/度固定结算，低于{term}现行平均电价约{fmt(r['grid_price'], 3)}元/度，合同期内按约定执行，具体以合同为准。",
             green,
-            f"光伏发电为{term}提供绿色电力，助力企业节能减排和绿色制造。" if r["project_type"] == "工商业"
-            else f"光伏发电为{term}提供绿色电力，节能减排，保护环境。",
+            f"光伏发电为{term}提供绿色电力，助力企业节能减排和绿色制造。",
         ]
         bar, line = "年节省电费（{unit}）", "累计节省（{unit}）"
     else:
@@ -419,8 +418,7 @@ def _fill_benefit(doc, head, tbl_el, r, term, company):
             + (f"静态投资回收期约{pb:.1f}年。" if pb else f"{years}年内未能收回投资。"),
             f"{years}年累计净收益约{_money(r['benefit_total'])}，扣除投资后净赚约{_money(r['benefit_total'] - r['investment'])}。",
             green,
-            f"光伏发电为{term}提供绿色电力，节能减排，提升企业形象。" if r["project_type"] == "工商业"
-            else f"光伏发电为{term}提供绿色电力，节能减排，保护环境。",
+            f"光伏发电为{term}提供绿色电力，节能减排，提升企业形象。",
         ]
         bar, line = "年净收益（{unit}）", "累计净收益（{unit}）"
     set_list(bullets, items)
@@ -436,7 +434,7 @@ def _fill_flow(tbl_el, coop, r, term, company):
         d = ["签订合同能源管理（EMC）协议，明确电价、期限、双方责任",
              "屋顶结构复核、现场勘察，确定最终布置方案",
              f"办理项目备案和电网接入申请，{term}配合提供资料",
-             "设备采购、安装施工，分区安排，不影响正常生产" if r["project_type"] == "工商业" else "设备采购、安装施工，不影响正常生活",
+             "设备采购、安装施工，分区安排，不影响正常生产",
              "电网验收合格后并网发电",
              "我方负责运维，按月抄表结算电费"]
         c = [f"合作模式：由我方全额投资、建设和运维，{term}提供屋顶及临时水电，按约定电价结算，无需任何投资。",
@@ -446,7 +444,7 @@ def _fill_flow(tbl_el, coop, r, term, company):
         d = ["签订EPC总包合同，明确工程范围、价格、工期及质保",
              "屋顶结构复核、现场勘察，确定最终布置方案",
              f"办理项目备案和电网接入申请，{term}配合提供资料",
-             "设备采购、安装施工，分区安排，不影响正常生产" if r["project_type"] == "工商业" else "设备采购、安装施工，不影响正常生活",
+             "设备采购、安装施工，分区安排，不影响正常生产",
              "电网验收合格后并网发电",
              "移交电站，提供运维服务与发电数据查询"]
         c = [f"合作模式：{term}自主投资，我方提供设计、采购、施工及并网的一站式EPC服务，并可提供长期运维。",
@@ -457,6 +455,5 @@ def _fill_flow(tbl_el, coop, r, term, company):
     set_p(titles[5], t6)
     set_p(_paras(coop[0])[0], c[0])
     set_p(_paras(coop[1])[0], c[1])
-    life = "生产" if r["project_type"] == "工商业" else "生活"
     set_p(_paras(coop[2])[0], f"预计工期：备案及接入审批约1～2个月，施工安装约{'2～3个月' if r['kwp'] >= 500 else '1～4周'}"
-                              f"（受审批、天气和{term}{life}安排影响，以实际为准）。")
+                              f"（受审批、天气和{term}生产安排影响，以实际为准）。")

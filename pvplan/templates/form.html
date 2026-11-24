@@ -6,7 +6,7 @@
 </label>
 {%- endmacro %}
 {% block body %}
-<h1>新建光伏方案</h1>
+<h1>新建工商业光伏方案</h1>
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
 <form method="post" id="planform" class="planform">
 <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -16,13 +16,8 @@
 <section class="card">
   <h2>1. 客户信息</h2>
   <div class="grid">
-    <label>项目类型
-      <select name="project_type" id="ptype">
-        {% for t in ['工商业', '户用'] %}<option {% if form.project_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
-      </select>
-    </label>
     {{ f('client_name', '客户名称', ph='例如：西北机器有限公司') }}
-    {{ f('client_term', '方案里对客户的称呼', '例如：工厂、企业、学校、业主、农户') }}
+    {{ f('client_term', '方案里对客户的称呼', '例如：工厂、企业、园区、学校、医院') }}
     {{ f('address', '项目地址', cls='span2', ph='省 市 县 街道 门牌') }}
     {{ f('roof_area', '屋顶面积', '写成方案里的样子，例如：约0.7～1万平方米', ph='约5000平方米') }}
     {{ f('plan_suffix', '方案标题（容量后面的文字）', '封面标题 = 装机规模 + 这段文字') }}
@@ -37,7 +32,7 @@
     {{ f('capacity_kw', '规划装机容量', '填了组件数量就以组件数量为准', type='num', unit='kWp') }}
     {{ f('module_count', '组件数量（可不填）', '不填则按规划容量自动计算', type='num', unit='块') }}
     {{ f('inverter_kw', '逆变器单台功率', type='num', unit='kW') }}
-    {{ f('inverter_count', '逆变器数量（可不填）', '不填则按容配比约 1.1 自动配置', type='num', unit='台') }}
+    {{ f('inverter_count', '逆变器数量（可不填）', '不填则按容配比约 1.2 自动配置', type='num', unit='台') }}
     {{ f('inverter_type', '逆变器类型') }}
     {{ f('install_method', '安装方式', '例如：阵列式安装、平铺安装、彩钢瓦夹具安装') }}
   </div>
@@ -60,7 +55,7 @@
   </div>
 </section>
 
-<section class="card only-ci">
+<section class="card">
   <h2>4. 用电情况 <span class="muted small">（选填，填了会多出「用电现状」和「用电与发电匹配」两页）</span></h2>
   <div class="grid">
     {{ f('usage_start', '账单起始月份', '例如：2025-01', ph='2025-01') }}
@@ -76,7 +71,7 @@
 </section>
 
 <section class="card">
-  <h2><span class="only-ci">5</span><span class="only-home">4</span>. 商业模式与电价</h2>
+  <h2>5. 商业模式与电价</h2>
   <div class="grid">
     <label>商业模式
       <select name="model" id="model">
@@ -100,6 +95,5 @@
 </aside>
 </div>
 </form>
-<script>window.PV_DEFAULTS = {{ defaults|tojson }};</script>
 <script src="{{ url_for('static', filename='form.js') }}"></script>
 {% endblock %}

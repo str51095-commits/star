@@ -3,8 +3,7 @@
 <div class="row-between">
   <h1>方案列表</h1>
   <div class="actions">
-    <a class="btn primary" href="{{ url_for('new', type='工商业') }}">＋ 工商业方案</a>
-    <a class="btn primary" href="{{ url_for('new', type='户用') }}">＋ 户用方案</a>
+    <a class="btn primary" href="{{ url_for('new') }}">＋ 新建方案</a>
   </div>
 </div>
 <p class="muted small">为节省服务器空间，只保留最近 {{ keep }} 份方案，更早的会自动删除，生成后请及时下载。</p>
@@ -18,8 +17,7 @@
   <a class="item" href="{{ url_for('plan', pid=r['id']) }}">
     <div class="item-main">
       <strong>{{ r['client'] }}</strong>
-      <span class="tag">{{ r['ptype'] }}</span>
-      <span class="tag grey">{{ models[r['model']] }}</span>
+      <span class="tag">{{ models[r['model']] }}</span>
     </div>
     <div class="muted small">{{ '%.1f'|format(r['kwp']) }} kWp · {{ r['author'] }} · {{ r['created'] }}</div>
   </a>
