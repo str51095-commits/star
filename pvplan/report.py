@@ -167,7 +167,7 @@ def build(r: dict, settings: dict) -> bytes:
     full_feed = ratio <= 0
     model = r["model"]
     years = r["years"]
-    investor = f"{company}全额投资" if model in ("emc", "rent") else f"{term}自主投资"
+    investor = f"{company}全额投资" if model == "emc" else f"{term}自主投资"
 
     # ---- 封面
     set_p(P("client", 0), r["client_name"])
@@ -219,9 +219,7 @@ def build(r: dict, settings: dict) -> bytes:
 
     # ---- 项目建议
     set_p(P("advice", 0), f"利用{term}屋顶，建设分布式光伏发电项目")
-    if model == "rent":
-        set_p(P("advice1", 0), "1、增加收益：出租闲置屋顶，每年获得稳定的租金收入；")
-    elif full_feed:
+    if full_feed:
         set_p(P("advice1", 0), "1、增加收益：光伏电量全部上网销售，获得长期稳定的发电收益；")
 
     # ---- 组件 / 逆变器
@@ -387,26 +385,6 @@ def _fill_invest(doc, head, tbl_el, r, term, company):
             f"我方可提供运维服务（远程监控、定期巡检与清洗），保障电站长期稳定发电。",
             (f"光伏组件寿命30年，本方案按{years}年测算收益。", True),
         ]
-    else:  # rent
-        set_p(_paras(head)[0], f"项目投资方案：由我方全额投资，{term}出租屋顶获得租金收益")
-        rows = [
-            (f"{term}投资", "0元"),
-            ("租赁期限", f"{cy}年"),
-            ("发电量/年", gen1),
-            ("租金标准", f"{fmt(r['rent_price'], 2)}{r['rent_unit']}"),
-            ("年租金", f"约{_money(r['benefit_y1'])}"),
-            (f"{cy}年累计租金", f"约{_money(r['benefit_total'])}"),
-        ]
-        basis = {"panel": f"按{r['module_count']}块组件计算", "kw": f"按装机容量{r['kwp_text']}kWp计算", "fixed": "按固定金额计算"}[r["rent_basis"]]
-        note = f"（年租金{basis}，具体以租赁合同为准。）"
-        items = [
-            f"投资方全额投资建设，{term}提供屋顶以及临时用水用电，配合办理项目备案和电网接入手续。",
-            f"电站建设、运维费用均由投资方承担，{term}无需承担任何费用。",
-            "所发电量由投资方并网销售，电费收益归投资方所有。",
-            f"{term}按约定标准每年获得屋顶租金，租期内租金标准保持不变，按年支付。",
-            "施工采用不破坏屋顶防水层的安装方式，光伏组件还可起到隔热作用，降低顶层室内温度。",
-            (f"光伏寿命30年，{term}与投资方签署屋顶租赁合同为{cy}年。", True),
-        ]
     _set_table_rows(nested, rows)
     set_p(lnote, note)
     set_list(rps, items)
@@ -432,7 +410,7 @@ def _fill_benefit(doc, head, tbl_el, r, term, company):
             else f"光伏发电为{term}提供绿色电力，节能减排，保护环境。",
         ]
         bar, line = "年节省电费（{unit}）", "累计节省（{unit}）"
-    elif model == "self":
+    else:
         set_p(_paras(head)[0], f"{term}收益测算与环保效益")
         set_p(note, "注：年净收益按各年发电量衰减后折算，已扣除运维费用，具体以实际发电和结算为准。")
         pb = r["payback"]
@@ -445,16 +423,6 @@ def _fill_benefit(doc, head, tbl_el, r, term, company):
             else f"光伏发电为{term}提供绿色电力，节能减排，保护环境。",
         ]
         bar, line = "年净收益（{unit}）", "累计净收益（{unit}）"
-    else:
-        set_p(_paras(head)[0], f"{term}收益测算与环保效益")
-        set_p(note, "注：租金按合同约定标准计算，具体以租赁合同为准。")
-        items = [
-            f"{term}零投资、零运维，每年获得屋顶租金约{_money(r['benefit_y1'])}，{r['benefit_years']}年累计约{_money(r['benefit_total'])}。",
-            "闲置屋顶变为稳定收入来源，光伏组件遮阳还可降低屋顶温度。",
-            green,
-            f"光伏发电为社会提供绿色电力，助力节能减排。",
-        ]
-        bar, line = "年租金（{unit}）", "累计租金（{unit}）"
     set_list(bullets, items)
     doc.part.related_parts[RID_BENEFIT]._blob = charts.benefit_chart(r["yearly"], r["benefit_cum"], bar, line)
 
@@ -474,7 +442,7 @@ def _fill_flow(tbl_el, coop, r, term, company):
         c = [f"合作模式：由我方全额投资、建设和运维，{term}提供屋顶及临时水电，按约定电价结算，无需任何投资。",
              f"合作期限：{cy}年（光伏电站设计寿命30年）；合作期满后电站的处置方式由双方协商确定。"]
         t6 = "6  运营结算"
-    elif model == "self":
+    else:
         d = ["签订EPC总包合同，明确工程范围、价格、工期及质保",
              "屋顶结构复核、现场勘察，确定最终布置方案",
              f"办理项目备案和电网接入申请，{term}配合提供资料",
@@ -484,16 +452,6 @@ def _fill_flow(tbl_el, coop, r, term, company):
         c = [f"合作模式：{term}自主投资，我方提供设计、采购、施工及并网的一站式EPC服务，并可提供长期运维。",
              f"收益测算：按{r['years']}年计算（光伏电站设计寿命30年），回收期后发电收益全部归{term}所有。"]
         t6 = "6  运维服务"
-    else:
-        d = ["签订屋顶租赁协议，明确租金、期限、双方责任",
-             "屋顶结构复核、现场勘察，确定最终布置方案",
-             f"办理项目备案和电网接入申请，{term}配合提供资料",
-             "设备采购、安装施工，不影响正常生产生活",
-             "电网验收合格后并网发电",
-             f"我方负责运维，按年向{term}支付租金"]
-        c = [f"合作模式：由我方全额投资、建设和运维，{term}提供屋顶并按年收取租金，无需任何投资。",
-             f"租赁期限：{cy}年（光伏电站设计寿命30年）；期满后电站的处置方式由双方协商确定。"]
-        t6 = "6  收取租金"
     for p, txt in zip(descs, d):
         set_p(p, txt)
     set_p(titles[5], t6)

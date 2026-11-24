@@ -16,10 +16,8 @@ MONTH_PROFILE = [x / _s for x in MONTH_PROFILE]
 MODELS = {
     "emc": "投资方全额投资（合同能源管理）",
     "self": "业主自投",
-    "rent": "屋顶租赁",
 }
 GRID_MODES = ["自发自用，余电上网", "全额上网", "全部自发自用"]
-RENT_BASIS = {"panel": "元/块/年", "kw": "元/kW/年", "fixed": "元/年（固定）"}
 
 
 class InputError(ValueError):
@@ -153,10 +151,9 @@ def compute(form: dict) -> dict:
     if inv_n_raw:
         inv_n = _num(d, "inverter_count", "逆变器数量（台）", lo=1, hi=10000, integer=True)
     else:
-        # 按容配比约 1.1 配置，且不超过 1.35
-        inv_n = max(1, round(kwp / 1.1 / inv_kw))
-        while kwp / (inv_n * inv_kw) > 1.35:
-            inv_n += 1
+        # 选容配比最接近 1.1 的台数
+        base = max(1, int(kwp / 1.1 / inv_kw))
+        inv_n = min((base, base + 1), key=lambda k: abs(kwp / (k * inv_kw) - 1.1))
     r["inverter_count"] = inv_n
     r["inverter_type"] = _text(d, "inverter_type", "组串逆变器")
     r["dc_ac_ratio"] = kwp / (inv_n * inv_kw)
@@ -167,7 +164,7 @@ def compute(form: dict) -> dict:
     r["grid_mode"] = grid_mode
 
     # ---------- 发电参数 ----------
-    hours = _num(d, "hours", "首年等效利用小时数（h）", lo=300, hi=2500)
+    hours = _num(d, "hours", "首年等效利用小时数（h）", default=1400.0, lo=300, hi=2500)
     d1 = _num(d, "decay_first", "首年衰减率（%）", default=1.0, lo=0, hi=10)
     dn = _num(d, "decay_annual", "之后每年衰减率（%）", default=0.4, lo=0, hi=5)
     years = _num(d, "years", "测算年限（年）", default=25, lo=1, hi=30, integer=True)
@@ -282,23 +279,8 @@ def compute(form: dict) -> dict:
         r["payback"] = payback
         tot = sum(yearly)
         r["roi_total"] = (tot - r["investment"]) / r["investment"] * 100 if r["investment"] else 0
-    else:  # rent
-        basis = _text(d, "rent_basis", "kw")
-        if basis not in RENT_BASIS:
-            raise InputError("租金计算方式不正确")
-        price = _num(d, "rent_price", "租金标准", lo=0, hi=1e7)
-        if basis == "panel":
-            annual = price * n
-        elif basis == "kw":
-            annual = price * kwp
-        else:
-            annual = price
-        r.update(rent_basis=basis, rent_price=price, rent_unit=RENT_BASIS[basis])
-        yearly = [annual] * r["contract_years"]
-        r["benefit_label"] = "屋顶租金"
-        r["investment"] = 0.0
 
-    # 收益年限：EMC/租赁 按合同期，自投按测算年限
+    # 收益年限：EMC 按合同期，自投按测算年限
     if model in ("emc",):
         yearly = yearly[: r["contract_years"]]
     r["yearly"] = yearly

@@ -48,8 +48,11 @@ def test_emc_report_has_client_and_numbers():
 
 @pytest.mark.parametrize("form,expect,absent", [
     (dict(BASE, project_type="户用", client_name="张三", address="宁夏吴忠", capacity_kw="30", inverter_kw="30",
-          grid_mode="全额上网", model="rent", rent_basis="panel", rent_price="30", contract_years="20"),
-     ["业主出租屋顶", "30元/块/年", "约1380元", "发电量（度）"], ["用电现状", "工厂"]),
+          grid_mode="全额上网", model="self", feed_price="0.3595", invest_unit="3.0"),
+     ["业主自主投资，全额上网", "静态投资回收期", "发电量（度）"], ["用电现状", "工厂", "租金"]),
+    (dict(BASE, project_type="户用", client_name="李四", address="宁夏吴忠", capacity_kw="30", inverter_kw="30",
+          grid_mode="自发自用，余电上网", self_ratio="40", model="emc", grid_price="0.55", ppa_price="0.45"),
+     ["业主享受0.45元/度固定电价", "合同能源管理（EMC）"], ["用电现状", "工厂", "租金"]),
     (dict(BASE, project_type="工商业", client_name="某食品厂", address="银川", capacity_kw="500",
           grid_mode="自发自用，余电上网", self_ratio="80", model="self", grid_price="0.62", feed_price="0.2595",
           invest_unit="2.8"),
@@ -64,6 +67,18 @@ def test_other_models(form, expect, absent):
     for s in absent:
         assert s not in t, s
     assert "（示例）" not in t
+
+
+def test_default_hours_1400():
+    f = dict(BASE, project_type="工商业", client_name="a", address="b", capacity_kw="100", self_ratio="80",
+             grid_price="0.6", ppa_price="0.4")
+    f.pop("hours")
+    r = calc.compute(f)
+    assert r["hours"] == 1400
+    assert "rent" not in calc.MODELS
+    f["model"] = "rent"
+    with pytest.raises(calc.InputError):
+        calc.compute(f)
 
 
 def test_payback():
@@ -112,3 +127,10 @@ def test_web_flow(tmp_path, monkeypatch):
     assert "1.5MW" in rv.headers["Content-Disposition"]
     j = c.post("/api/preview", data=dict(EMC), headers={"X-CSRF": tok}).get_json()
     assert j["ok"] and j["items"][0][0] == "装机容量"
+    # 只保留最新 3 份
+    for i in range(4):
+        assert c.post("/new", data=dict(EMC, client_name=f"客户{i}", _csrf=tok)).status_code == 302
+    ids = sorted(int(f.split(".")[0]) for f in os.listdir(tmp_path / "files"))
+    assert ids == [3, 4, 5]
+    assert c.get("/p/1/download").status_code == 404
+    assert "客户3" in c.get("/").get_data(as_text=True)

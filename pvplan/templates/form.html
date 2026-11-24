@@ -52,7 +52,7 @@
       </select>
     </label>
     {{ f('self_ratio', '自发自用比例', '白天用电越多比例越高，工厂一般 70～95', type='num', unit='%', cls='g-ratio') }}
-    {{ f('hours', '首年等效利用小时数', '按当地实际取值（原模版陕西宝鸡按 1050）', type='num', unit='h') }}
+    {{ f('hours', '首年等效利用小时数', '默认按 1400h，可按当地实际调整', type='num', unit='h') }}
     {{ f('years', '测算年限', type='num', unit='年') }}
     {{ f('decay_first', '首年衰减', type='num', unit='%') }}
     {{ f('decay_annual', '之后每年衰减', type='num', unit='%') }}
@@ -85,16 +85,10 @@
     </label>
     {{ f('grid_price', '客户现行用电电价', '电费÷电量的平均电价', type='num', unit='元/度', cls='g-grid') }}
     {{ f('ppa_price', '光伏结算电价', '客户向我方买光伏电的价格', type='num', unit='元/度', cls='m-emc') }}
-    {{ f('contract_years', '合同期限', type='num', unit='年', cls='m-emc m-rent') }}
+    {{ f('contract_years', '合同期限', type='num', unit='年', cls='m-emc') }}
     {{ f('invest_unit', '投资单价（EPC）', type='num', unit='元/W', cls='m-self') }}
     {{ f('om_unit', '运维费用', type='num', unit='元/W/年', cls='m-self') }}
     {{ f('feed_price', '上网电价', '余电/全额上网的结算电价（当地燃煤基准价）', type='num', unit='元/度', cls='m-self g-feed') }}
-    <label class="m-rent">租金计算方式
-      <select name="rent_basis">
-        {% for k, v in rent_basis.items() %}<option value="{{ k }}" {% if form.rent_basis == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
-      </select>
-    </label>
-    {{ f('rent_price', '租金标准', '按上面选的方式填写金额', type='num', unit='元', cls='m-rent') }}
   </div>
 </section>
 

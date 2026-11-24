@@ -33,6 +33,8 @@ SETTING_LABELS = {
     "partner_line": "组件页合作资质说明（留空则不显示）",
 }
 
+KEEP_PLANS = int(os.environ.get("PVPLAN_KEEP", "3"))  # 服务器上最多保留的方案份数
+
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
 
@@ -178,15 +180,15 @@ def logout():
 DEFAULTS = {
     "工商业": dict(project_type="工商业", client_term="工厂", module_name="隆基HPBC三防", module_power="655",
                 inverter_kw="150", inverter_type="组串逆变器", install_method="阵列式安装",
-                grid_mode="自发自用，余电上网", hours="1050", self_ratio="90", decay_first="1", decay_annual="0.4",
+                grid_mode="自发自用，余电上网", hours="1400", self_ratio="90", decay_first="1", decay_annual="0.4",
                 years="25", emission_factor="0.5306", model="emc", contract_years="25", ppa_price="0.45",
-                invest_unit="2.8", om_unit="0.03", rent_basis="kw", rent_price="", usage_start="",
+                invest_unit="2.8", om_unit="0.03", usage_start="",
                 plan_suffix="分布式光伏发电项目前期方案"),
     "户用": dict(project_type="户用", client_term="业主", module_name="隆基HPBC三防", module_power="655",
                inverter_kw="20", inverter_type="组串逆变器", install_method="阵列式安装",
-               grid_mode="全额上网", hours="1050", self_ratio="30", decay_first="1", decay_annual="0.4",
-               years="25", emission_factor="0.5306", model="rent", contract_years="25", ppa_price="",
-               invest_unit="3.0", om_unit="0.02", rent_basis="panel", rent_price="30",
+               grid_mode="全额上网", hours="1400", self_ratio="30", decay_first="1", decay_annual="0.4",
+               years="25", emission_factor="0.5306", model="self", contract_years="25", ppa_price="0.45",
+               invest_unit="3.0", om_unit="0.02",
                plan_suffix="户用光伏发电项目方案"),
 }
 FIELDS = sorted({k for v in DEFAULTS.values() for k in v} | {
@@ -204,6 +206,18 @@ def _filename(client, kwp):
     return f"{safe}{scale}光伏方案.docx"
 
 
+def prune():
+    """只保留最新的 KEEP_PLANS 份方案，更早的连同 Word 文件一起删除。"""
+    old = db().execute("SELECT id FROM plans ORDER BY id DESC LIMIT -1 OFFSET ?", (KEEP_PLANS,)).fetchall()
+    for row in old:
+        db().execute("DELETE FROM plans WHERE id=?", (row["id"],))
+        try:
+            os.remove(os.path.join(FILES, f"{row['id']}.docx"))
+        except FileNotFoundError:
+            pass
+    db().commit()
+
+
 @app.route("/")
 @login_required
 def index():
@@ -215,7 +229,7 @@ def index():
         args.append(f"%{q}%")
     sql += " ORDER BY plans.id DESC LIMIT 200"
     rows = db().execute(sql, args).fetchall()
-    return render_template("index.html", rows=rows, q=q, models=calc.MODELS)
+    return render_template("index.html", rows=rows, q=q, models=calc.MODELS, keep=KEEP_PLANS)
 
 
 @app.route("/new", methods=["GET", "POST"])
@@ -238,6 +252,7 @@ def new():
             db().commit()
             with open(os.path.join(FILES, f"{cur.lastrowid}.docx"), "wb") as f:
                 f.write(data)
+            prune()
             return redirect(url_for("plan", pid=cur.lastrowid, new=1))
     else:
         src = request.args.get("from", type=int)
@@ -248,7 +263,7 @@ def new():
             if row:
                 form.update(json.loads(row["form"]))
     return render_template("form.html", form=form, error=error, defaults=DEFAULTS,
-                           grid_modes=calc.GRID_MODES, models=calc.MODELS, rent_basis=calc.RENT_BASIS)
+                           grid_modes=calc.GRID_MODES, models=calc.MODELS)
 
 
 @app.route("/api/preview", methods=["POST"])

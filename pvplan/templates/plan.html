@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-{% if is_new %}<div class="flash ok">方案已生成，可以下载了</div>{% endif %}
+{% if is_new %}<div class="flash ok">方案已生成，请及时下载（服务器只保留最近几份方案）</div>{% endif %}
 <div class="card">
   <h1>{{ row['client'] }}</h1>
   <p class="muted">{{ row['ptype'] }} · {{ models[row['model']] }} · {{ row['author'] }} 于 {{ row['created'] }} 生成</p>

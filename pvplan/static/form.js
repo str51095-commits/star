@@ -12,7 +12,7 @@
     show('.only-ci', t === '工商业');
     show('.only-home', t !== '工商业');
     show('.g-ratio', g === '自发自用，余电上网');
-    ['emc', 'self', 'rent'].forEach(function (k) { show('.m-' + k, false); });
+    ['emc', 'self'].forEach(function (k) { show('.m-' + k, false); });
     show('.m-' + m, true);
     show('.g-grid', m === 'emc' || g !== '全额上网');
     if (m === 'self') show('.g-feed', g !== '全部自发自用');

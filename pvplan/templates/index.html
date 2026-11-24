@@ -7,6 +7,7 @@
     <a class="btn primary" href="{{ url_for('new', type='户用') }}">＋ 户用方案</a>
   </div>
 </div>
+<p class="muted small">为节省服务器空间，只保留最近 {{ keep }} 份方案，更早的会自动删除，生成后请及时下载。</p>
 <form class="search" method="get">
   <input name="q" value="{{ q }}" placeholder="按客户名称搜索">
   <button>搜索</button>
