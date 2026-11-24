@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% macro f(name, label, hint='', type='text', unit='', cls='', ph='') -%}
+<label class="{{ cls }}">{{ label }}{% if unit %} <span class="unit">{{ unit }}</span>{% endif %}
+  <input name="{{ name }}" value="{{ form.get(name, '') }}" {% if type == 'num' %}inputmode="decimal"{% endif %} placeholder="{{ ph }}">
+  {% if hint %}<small>{{ hint }}</small>{% endif %}
+</label>
+{%- endmacro %}
+{% block body %}
+<h1>新建光伏方案</h1>
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<form method="post" id="planform" class="planform">
+<input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+<div class="layout">
+<div class="fields">
+
+<section class="card">
+  <h2>1. 客户信息</h2>
+  <div class="grid">
+    <label>项目类型
+      <select name="project_type" id="ptype">
+        {% for t in ['工商业', '户用'] %}<option {% if form.project_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select>
+    </label>
+    {{ f('client_name', '客户名称', ph='例如：西北机器有限公司') }}
+    {{ f('client_term', '方案里对客户的称呼', '例如：工厂、企业、学校、业主、农户') }}
+    {{ f('address', '项目地址', cls='span2', ph='省 市 县 街道 门牌') }}
+    {{ f('roof_area', '屋顶面积', '写成方案里的样子，例如：约0.7～1万平方米', ph='约5000平方米') }}
+    {{ f('plan_suffix', '方案标题（容量后面的文字）', '封面标题 = 装机规模 + 这段文字') }}
+  </div>
+</section>
+
+<section class="card">
+  <h2>2. 系统配置</h2>
+  <div class="grid">
+    {{ f('module_name', '组件品牌型号', '例如：隆基HPBC三防') }}
+    {{ f('module_power', '组件功率', type='num', unit='W') }}
+    {{ f('capacity_kw', '规划装机容量', '填了组件数量就以组件数量为准', type='num', unit='kWp') }}
+    {{ f('module_count', '组件数量（可不填）', '不填则按规划容量自动计算', type='num', unit='块') }}
+    {{ f('inverter_kw', '逆变器单台功率', type='num', unit='kW') }}
+    {{ f('inverter_count', '逆变器数量（可不填）', '不填则按容配比约 1.1 自动配置', type='num', unit='台') }}
+    {{ f('inverter_type', '逆变器类型') }}
+    {{ f('install_method', '安装方式', '例如：阵列式安装、平铺安装、彩钢瓦夹具安装') }}
+  </div>
+</section>
+
+<section class="card">
+  <h2>3. 发电与并网</h2>
+  <div class="grid">
+    <label>并网方式
+      <select name="grid_mode" id="gridmode">
+        {% for m in grid_modes %}<option {% if form.grid_mode == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+      </select>
+    </label>
+    {{ f('self_ratio', '自发自用比例', '白天用电越多比例越高，工厂一般 70～95', type='num', unit='%', cls='g-ratio') }}
+    {{ f('hours', '首年等效利用小时数', '按当地实际取值（原模版陕西宝鸡按 1050）', type='num', unit='h') }}
+    {{ f('years', '测算年限', type='num', unit='年') }}
+    {{ f('decay_first', '首年衰减', type='num', unit='%') }}
+    {{ f('decay_annual', '之后每年衰减', type='num', unit='%') }}
+    {{ f('emission_factor', '电网排放因子', '全国平均 0.5306（生态环境部 2023）', type='num', unit='kgCO₂/kWh') }}
+  </div>
+</section>
+
+<section class="card only-ci">
+  <h2>4. 用电情况 <span class="muted small">（选填，填了会多出「用电现状」和「用电与发电匹配」两页）</span></h2>
+  <div class="grid">
+    {{ f('usage_start', '账单起始月份', '例如：2025-01', ph='2025-01') }}
+    {{ f('usage_type', '用电类别及容量', '例如：10kV大工业用电，合同容量8750kVA') }}
+    <label class="span2">每月用电量 <span class="unit">万度</span>
+      <textarea name="usage_monthly" rows="6" placeholder="每行一个月，从起始月份开始&#10;64.2&#10;64.3&#10;60.5&#10;缺账单的月份填 -">{{ form.get('usage_monthly', '') }}</textarea>
+      <small>每行填一个月；缺账单的月份填一个减号 -</small>
+    </label>
+    <label class="span2">其他用电说明（每行一条，会显示在用电现状页）
+      <textarea name="usage_notes" rows="3" placeholder="例如：白天平均负荷约780～1300kW，夜间约300～620kW">{{ form.get('usage_notes', '') }}</textarea>
+    </label>
+  </div>
+</section>
+
+<section class="card">
+  <h2><span class="only-ci">5</span><span class="only-home">4</span>. 商业模式与电价</h2>
+  <div class="grid">
+    <label>商业模式
+      <select name="model" id="model">
+        {% for k, v in models.items() %}<option value="{{ k }}" {% if form.model == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+      </select>
+    </label>
+    {{ f('grid_price', '客户现行用电电价', '电费÷电量的平均电价', type='num', unit='元/度', cls='g-grid') }}
+    {{ f('ppa_price', '光伏结算电价', '客户向我方买光伏电的价格', type='num', unit='元/度', cls='m-emc') }}
+    {{ f('contract_years', '合同期限', type='num', unit='年', cls='m-emc m-rent') }}
+    {{ f('invest_unit', '投资单价（EPC）', type='num', unit='元/W', cls='m-self') }}
+    {{ f('om_unit', '运维费用', type='num', unit='元/W/年', cls='m-self') }}
+    {{ f('feed_price', '上网电价', '余电/全额上网的结算电价（当地燃煤基准价）', type='num', unit='元/度', cls='m-self g-feed') }}
+    <label class="m-rent">租金计算方式
+      <select name="rent_basis">
+        {% for k, v in rent_basis.items() %}<option value="{{ k }}" {% if form.rent_basis == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+      </select>
+    </label>
+    {{ f('rent_price', '租金标准', '按上面选的方式填写金额', type='num', unit='元', cls='m-rent') }}
+  </div>
+</section>
+
+</div>
+<aside class="preview card">
+  <h2>实时测算</h2>
+  <div id="pv-out" class="muted">填写后这里会显示测算结果</div>
+  <button class="primary wide big" type="submit">生成 Word 方案</button>
+</aside>
+</div>
+</form>
+<script>window.PV_DEFAULTS = {{ defaults|tojson }};</script>
+<script src="{{ url_for('static', filename='form.js') }}"></script>
+{% endblock %}

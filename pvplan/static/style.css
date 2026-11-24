@@ -1,0 +1,64 @@
+:root { --red: #E60012; --red-d: #b8000e; --bg: #f5f5f5; --card: #fff; --text: #222; --muted: #777; --line: #e3e3e3; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; background: var(--bg); color: var(--text); font-size: 15px; }
+a { color: var(--red); text-decoration: none; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 22px; margin: 8px 0 16px; }
+h2 { font-size: 17px; margin: 0 0 12px; color: var(--red); }
+h3 { font-size: 15px; margin: 20px 0 8px; }
+.top { background: var(--red); color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; flex-wrap: wrap; gap: 8px; }
+.top a, .top .link { color: #fff; }
+.top nav { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 17px; }
+.card { background: var(--card); border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.narrow { max-width: 420px; margin: 40px auto; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; font-weight: normal; }
+label { display: block; margin-bottom: 12px; font-size: 14px; }
+label small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+.unit { color: var(--muted); font-size: 12px; }
+input, select, textarea { display: block; width: 100%; margin-top: 4px; padding: 9px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; font-family: inherit; background: #fff; }
+input:focus, select:focus, textarea:focus { outline: 2px solid rgba(230,0,18,.25); border-color: var(--red); }
+.check { display: flex; align-items: center; gap: 6px; }
+.check input { width: auto; display: inline; margin: 0; }
+button, .btn { display: inline-block; padding: 9px 16px; border: 1px solid #ccc; border-radius: 6px; background: #fff; color: var(--text); font-size: 15px; cursor: pointer; font-family: inherit; }
+.primary { background: var(--red); border-color: var(--red); color: #fff; }
+.primary:hover { background: var(--red-d); }
+.danger { color: var(--red); border-color: var(--red); }
+.link { background: none; border: none; padding: 0; }
+.wide { width: 100%; }
+.big { padding: 13px 18px; font-size: 17px; margin: 12px 0; }
+button:disabled { opacity: .6; }
+.inline { display: inline; }
+.flash { background: #fff3cd; border: 1px solid #f0d58a; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; }
+.flash.err { background: #fde8ea; border-color: #f5b5bc; color: #a1000c; }
+.flash.ok { background: #e6f6ea; border-color: #a9dcb5; }
+.row-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.search { display: flex; gap: 8px; margin-bottom: 14px; }
+.search input { margin: 0; }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.item { display: block; background: #fff; border-radius: 8px; padding: 12px 14px; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.item:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+.item-main { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+.tag { background: #fde8ea; color: var(--red); border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+.tag.grey { background: #eee; color: #555; }
+.empty { text-align: center; color: var(--muted); padding: 40px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.span2 { grid-column: span 2; }
+.layout { display: grid; grid-template-columns: 1fr 340px; gap: 16px; align-items: start; }
+.preview { position: sticky; top: 12px; }
+table.kv { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.kv th, .kv td { text-align: left; padding: 7px 4px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: top; }
+.kv th { color: var(--muted); font-weight: normal; width: 42%; }
+table.users { width: 100%; border-collapse: collapse; }
+.users th, .users td { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.users input.short { display: inline-block; width: 110px; margin: 0 4px 0 0; padding: 6px; font-size: 14px; }
+.users button { padding: 5px 10px; font-size: 13px; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  .preview { position: static; }
+  .grid { grid-template-columns: 1fr; }
+  .span2 { grid-column: span 1; }
+  .users td form { display: flex; flex-wrap: wrap; gap: 4px; }
+}

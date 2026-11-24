@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="row-between">
+  <h1>方案列表</h1>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('new', type='工商业') }}">＋ 工商业方案</a>
+    <a class="btn primary" href="{{ url_for('new', type='户用') }}">＋ 户用方案</a>
+  </div>
+</div>
+<form class="search" method="get">
+  <input name="q" value="{{ q }}" placeholder="按客户名称搜索">
+  <button>搜索</button>
+</form>
+{% if rows %}
+<div class="list">
+{% for r in rows %}
+  <a class="item" href="{{ url_for('plan', pid=r['id']) }}">
+    <div class="item-main">
+      <strong>{{ r['client'] }}</strong>
+      <span class="tag">{{ r['ptype'] }}</span>
+      <span class="tag grey">{{ models[r['model']] }}</span>
+    </div>
+    <div class="muted small">{{ '%.1f'|format(r['kwp']) }} kWp · {{ r['author'] }} · {{ r['created'] }}</div>
+  </a>
+{% endfor %}
+</div>
+{% else %}
+<div class="card empty">{% if q %}没有找到「{{ q }}」的方案{% else %}还没有方案，点右上角新建一个{% endif %}</div>
+{% endif %}
+{% endblock %}

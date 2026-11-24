@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>设置</h1>
+<div class="card">
+  <h2>公司信息</h2>
+  <p class="muted small">会写进每份新生成的方案（封面「编制单位」等位置）。</p>
+  <form method="post">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="company">
+    {% for k, label in labels.items() %}<label>{{ label }}<input name="{{ k }}" value="{{ s[k] }}"></label>{% endfor %}
+    <button class="primary">保存公司信息</button>
+  </form>
+</div>
+<div class="card">
+  <h2>员工账号</h2>
+  <table class="users">
+    <tr><th>用户名</th><th>姓名</th><th>角色</th><th></th></tr>
+    {% for u in users %}
+    <tr>
+      <td>{{ u['username'] }}</td><td>{{ u['name'] }}</td><td>{{ '管理员' if u['is_admin'] else '员工' }}</td>
+      <td>{% if u['id'] != current_user()['id'] %}
+        <form method="post" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="uid" value="{{ u['id'] }}">
+          <input name="password" type="password" placeholder="新密码" class="short">
+          <button name="action" value="reset_pw">重置密码</button>
+          <button name="action" value="del_user" class="danger" onclick="return confirm('确定删除账号 {{ u['username'] }} 吗？')">删除</button>
+        </form>{% else %}<span class="muted small">（当前登录）</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <h3>添加账号</h3>
+  <form method="post" class="grid">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add_user">
+    <label>用户名（字母或数字）<input name="username" required></label>
+    <label>姓名<input name="name"></label>
+    <label>初始密码（至少 6 位）<input name="password" type="password" minlength="6" required></label>
+    <label class="check"><input type="checkbox" name="is_admin"> 设为管理员</label>
+    <button class="primary">添加</button>
+  </form>
+</div>
+{% endblock %}

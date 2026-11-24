@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block body %}
+{% if is_new %}<div class="flash ok">方案已生成，可以下载了</div>{% endif %}
+<div class="card">
+  <h1>{{ row['client'] }}</h1>
+  <p class="muted">{{ row['ptype'] }} · {{ models[row['model']] }} · {{ row['author'] }} 于 {{ row['created'] }} 生成</p>
+  <a class="btn primary big" href="{{ url_for('download', pid=row['id']) }}">⬇ 下载 Word 方案</a>
+  <table class="kv">
+    {% for k, v in items %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}
+  </table>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('new', **{'from': row['id']}) }}">复制并修改</a>
+    {% if current_user()['is_admin'] or current_user()['id'] == row['user_id'] %}
+    <form method="post" action="{{ url_for('delete', pid=row['id']) }}" class="inline" onsubmit="return confirm('确定删除这个方案吗？')">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="danger">删除</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

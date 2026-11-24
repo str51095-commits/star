@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}光伏方案设计{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{% if current_user() %}
+<header class="top">
+  <a class="brand" href="/">☀ 光伏方案设计</a>
+  <nav>
+    <a href="{{ url_for('new') }}">新建方案</a>
+    {% if current_user()['is_admin'] %}<a href="{{ url_for('settings') }}">设置</a>{% endif %}
+    <a href="{{ url_for('password') }}">{{ current_user()['name'] }}</a>
+    <form method="post" action="{{ url_for('logout') }}" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link">退出</button>
+    </form>
+  </nav>
+</header>
+{% endif %}
+<main>
+{% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>
